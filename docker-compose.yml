@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  overlock-mcp-server:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - OVERLOCK_GRPC_URL=host.docker.internal:9090
+      - MCP_HTTP_ADDR=0.0.0.0:8080
+      - OVERLOCK_API_TIMEOUT=30s
+      - DEBUG=false
+    restart: unless-stopped
+    
+  # Example: Connect to local Overlock node
+  # Uncomment if running Overlock blockchain locally
+  # overlock-node:
+  #   image: overlock/node:latest
+  #   ports:
+  #     - "1317:1317"
+  #     - "26657:26657"
