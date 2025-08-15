@@ -78,9 +78,29 @@ func (m *MockQueryClient) ShowProvider(ctx context.Context, req *overlockv1beta1
 	return nil, nil
 }
 
-// ShowEnvironment implements the ShowEnvironment method (not used in our test)
+// ShowEnvironment implements the ShowEnvironment method by returning test data
 func (m *MockQueryClient) ShowEnvironment(ctx context.Context, req *overlockv1beta1.QueryShowEnvironmentRequest, opts ...grpc.CallOption) (*overlockv1beta1.QueryShowEnvironmentResponse, error) {
-	return nil, nil
+	// Load test data from JSON file
+	jsonFile := filepath.Join(m.testDataPath, "environment_response.json")
+	data, err := os.ReadFile(jsonFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var response overlockv1beta1.QueryShowEnvironmentResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+
+	// Check if the requested ID matches the test data
+	if req.Id != 1001 {
+		// Return empty response for non-matching IDs (environment not found)
+		return &overlockv1beta1.QueryShowEnvironmentResponse{
+			Environment: nil,
+		}, nil
+	}
+
+	return &response, nil
 }
 
 // ListEnvironment implements the ListEnvironment method (not used in our test)
