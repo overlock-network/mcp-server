@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCreateToolInputSchema(t *testing.T) {
-	schema := CreateToolInputSchema()
+func TestCreateProvidersToolInputSchema(t *testing.T) {
+	schema := CreateProvidersToolInputSchema()
 
 	require.NotNil(t, schema)
 	assert.Equal(t, "object", schema.Type)

@@ -4,9 +4,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 )
 
-// CreateToolInputSchema creates the JSON schema for the get-providers tool input
+// CreateProvidersToolInputSchema creates the JSON schema for the get-providers tool input
 // This schema matches the QueryListProviderRequest from the Overlock API
-func CreateToolInputSchema() *jsonschema.Schema {
+func CreateProvidersToolInputSchema() *jsonschema.Schema {
 	zero := 0.0
 	thousand := 1000.0
 

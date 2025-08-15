@@ -1,0 +1,11 @@
+{
+  "environment": {
+    "id": 1001,
+    "creator": "overlock1test123abc456def789creator",
+    "provider": 2001,
+    "metadata": {
+      "name": "production-environment",
+      "annotations": "{\"region\":\"us-east-1\",\"zone\":\"us-east-1a\",\"cluster_id\":\"cluster-prod-001\",\"version\":\"v1.27.3\"}"
+    }
+  }
+}
