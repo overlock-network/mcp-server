@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	overlockv1beta1 "github.com/overlock-network/api/go/node/overlock/crossplane/v1beta1"
 	"github.com/sony/gobreaker"
@@ -238,6 +239,188 @@ func TestEnvironmentHandler_Handle_WithValidID(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, response.Environment)
 	assert.Equal(t, envID, response.Environment.Id)
+
+	mockClient.AssertExpectations(t)
+}
+
+// Tests for HandleList method (get-environments tool)
+func TestEnvironmentHandler_HandleList_Success(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewEnvironmentHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	expectedResponse := &overlockv1beta1.QueryListEnvironmentResponse{
+		Environments: []overlockv1beta1.Environment{
+			{
+				Id:      1,
+				Creator: "test-creator-1",
+			},
+		},
+		Pagination: &query.PageResponse{
+			Total: 1,
+		},
+	}
+
+	mockClient.On("ListEnvironment", mock.AnythingOfType("*context.timerCtx"), mock.MatchedBy(func(req *overlockv1beta1.QueryListEnvironmentRequest) bool {
+		return req.Pagination.Limit == 10 && req.Pagination.Offset == 0
+	})).Return(expectedResponse, nil)
+
+	params := &mcp.CallToolParams{
+		Name: "get-environments",
+		Arguments: map[string]interface{}{
+			"limit": 10,
+		},
+	}
+
+	result, err := handler.HandleList(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Content, 1)
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+
+	var response overlockv1beta1.QueryListEnvironmentResponse
+	err = json.Unmarshal([]byte(textContent.Text), &response)
+	require.NoError(t, err)
+	assert.Len(t, response.Environments, 1)
+	assert.Equal(t, uint64(1), response.Environments[0].Id)
+
+	mockClient.AssertExpectations(t)
+}
+
+func TestEnvironmentHandler_HandleList_NilClient(t *testing.T) {
+	handler := NewEnvironmentHandler(nil, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	params := &mcp.CallToolParams{
+		Name:      "get-environments",
+		Arguments: map[string]interface{}{},
+	}
+
+	result, err := handler.HandleList(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Content, 1)
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "gRPC connection to blockchain is not available")
+}
+
+func TestEnvironmentHandler_HandleList_ValidationError(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewEnvironmentHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	params := &mcp.CallToolParams{
+		Name: "get-environments",
+		Arguments: map[string]interface{}{
+			"limit": 2000, // Exceeds maximum limit
+		},
+	}
+
+	result, err := handler.HandleList(ctx, session, params)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "validation failed")
+}
+
+func TestEnvironmentHandler_HandleList_DefaultValues(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewEnvironmentHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	expectedResponse := &overlockv1beta1.QueryListEnvironmentResponse{
+		Environments: []overlockv1beta1.Environment{},
+		Pagination:   &query.PageResponse{},
+	}
+
+	mockClient.On("ListEnvironment", mock.AnythingOfType("*context.timerCtx"), mock.MatchedBy(func(req *overlockv1beta1.QueryListEnvironmentRequest) bool {
+		return req.Pagination.Limit == 100 && req.Pagination.Offset == 0 && req.Creator == ""
+	})).Return(expectedResponse, nil)
+
+	params := &mcp.CallToolParams{
+		Name:      "get-environments",
+		Arguments: map[string]interface{}{},
+	}
+
+	result, err := handler.HandleList(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	mockClient.AssertExpectations(t)
+}
+
+func TestEnvironmentHandler_HandleList_CircuitBreakerOpen(t *testing.T) {
+	handler := NewEnvironmentHandler(nil, 30*time.Second)
+
+	handler.circuitBreaker = gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "test-breaker",
+		MaxRequests: 0,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return true
+		},
+	})
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	params := &mcp.CallToolParams{
+		Name:      "get-environments",
+		Arguments: map[string]interface{}{},
+	}
+
+	result, err := handler.HandleList(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Content, 1)
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "gRPC connection to blockchain is not available")
+}
+
+func TestEnvironmentHandler_HandleList_WithCreatorFilter(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewEnvironmentHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	expectedResponse := &overlockv1beta1.QueryListEnvironmentResponse{
+		Environments: []overlockv1beta1.Environment{},
+		Pagination:   &query.PageResponse{},
+	}
+
+	mockClient.On("ListEnvironment", mock.AnythingOfType("*context.timerCtx"), mock.MatchedBy(func(req *overlockv1beta1.QueryListEnvironmentRequest) bool {
+		return req.Creator == "test-creator-address" && req.Pagination.Limit == 100 && req.Pagination.Offset == 0
+	})).Return(expectedResponse, nil)
+
+	params := &mcp.CallToolParams{
+		Name: "get-environments",
+		Arguments: map[string]interface{}{
+			"creator": "test-creator-address",
+		},
+	}
+
+	result, err := handler.HandleList(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	mockClient.AssertExpectations(t)
 }

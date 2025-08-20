@@ -73,6 +73,14 @@ func startHTTPServer(cfg *config.Config, queryClient overlockv1beta1.QueryClient
 	environmentHandler := handler.NewEnvironmentHandler(queryClient, cfg.APITimeout)
 	mcp.AddTool(srv, environmentTool, environmentHandler.Handle)
 
+	// Register get-environments tool
+	environmentsTool := &mcp.Tool{
+		Name:        "get-environments",
+		Description: "Get list of all environments in the Overlock Network with optional filtering and pagination",
+		InputSchema: schema.CreateEnvironmentsToolInputSchema(),
+	}
+	mcp.AddTool(srv, environmentsTool, environmentHandler.HandleList)
+
 	// Create the HTTP handler for MCP
 	httpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return srv

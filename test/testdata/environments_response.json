@@ -1,0 +1,26 @@
+{
+  "environments": [
+    {
+      "id": 1001,
+      "creator": "overlock1abc123def456ghi789jkl012mno345pqr678stu901vwx",
+      "metadata": {
+        "name": "test-environment-1",
+        "annotations": "{\"region\":\"us-east-1\",\"type\":\"development\",\"version\":\"1.0.0\",\"description\":\"Test environment for E2E testing\"}"
+      },
+      "provider": 1
+    },
+    {
+      "id": 1002,
+      "creator": "overlock1xyz789ghi456def123abc012mno345pqr678stu901vwx",
+      "metadata": {
+        "name": "test-environment-2",
+        "annotations": "{\"region\":\"us-west-2\",\"type\":\"production\",\"version\":\"2.1.0\",\"description\":\"Production environment for testing\"}"
+      },
+      "provider": 2
+    }
+  ],
+  "pagination": {
+    "next_key": null,
+    "total": 2
+  }
+}
