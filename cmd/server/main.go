@@ -47,14 +47,23 @@ func startHTTPServer(cfg *config.Config, queryClient overlockv1beta1.QueryClient
 
 	srv := mcp.NewServer(impl, nil)
 
+	// Create shared providers handler for both tools
+	providersHandler := handler.NewProvidersHandler(queryClient, cfg.APITimeout)
+
 	// Register get-providers tool
 	providersTool := &mcp.Tool{
 		Name:        "get-providers",
 		Description: "Get list of all registered providers in the Overlock Network with optional filtering and pagination",
 		InputSchema: schema.CreateProvidersToolInputSchema(),
 	}
-	providersHandler := handler.NewProvidersHandler(queryClient, cfg.APITimeout)
-	mcp.AddTool(srv, providersTool, providersHandler.Handle)
+	mcp.AddTool(srv, providersTool, providersHandler.HandleList)
+
+	providerTool := &mcp.Tool{
+		Name:        "show-provider",
+		Description: "Get detailed information for a specific provider by their ID",
+		InputSchema: schema.CreateProviderToolInputSchema(),
+	}
+	mcp.AddTool(srv, providerTool, providersHandler.HandleShow)
 
 	environmentTool := &mcp.Tool{
 		Name:        "show-environment",

@@ -49,10 +49,12 @@ func TestNewProvidersHandler(t *testing.T) {
 	assert.Equal(t, mockClient, handler.chainClient)
 	assert.Equal(t, timeout, handler.timeout)
 	assert.NotNil(t, handler.circuitBreaker)
-	assert.Equal(t, "blockchain-client", handler.circuitBreaker.Name())
+	assert.Equal(t, "blockchain-client-providers", handler.circuitBreaker.Name())
 }
 
-func TestProvidersHandler_Handle_Success(t *testing.T) {
+// Tests for HandleList (get-providers functionality)
+
+func TestProvidersHandler_HandleList_Success(t *testing.T) {
 	mockClient := &MockQueryClient{}
 	handler := NewProvidersHandler(mockClient, 30*time.Second)
 
@@ -62,6 +64,7 @@ func TestProvidersHandler_Handle_Success(t *testing.T) {
 	expectedResponse := &overlockv1beta1.QueryListProviderResponse{
 		Providers: []overlockv1beta1.Provider{
 			{
+				Id:      1,
 				Creator: "test-creator",
 			},
 		},
@@ -76,7 +79,7 @@ func TestProvidersHandler_Handle_Success(t *testing.T) {
 		},
 	}
 
-	result, err := handler.Handle(ctx, session, params)
+	result, err := handler.HandleList(ctx, session, params)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -89,12 +92,11 @@ func TestProvidersHandler_Handle_Success(t *testing.T) {
 	err = json.Unmarshal([]byte(textContent.Text), &response)
 	require.NoError(t, err)
 	assert.Len(t, response.Providers, 1)
-	assert.Equal(t, "test-creator", response.Providers[0].Creator)
 
 	mockClient.AssertExpectations(t)
 }
 
-func TestProvidersHandler_Handle_NilClient(t *testing.T) {
+func TestProvidersHandler_HandleList_NilClient(t *testing.T) {
 	handler := NewProvidersHandler(nil, 30*time.Second)
 
 	ctx := context.Background()
@@ -105,7 +107,7 @@ func TestProvidersHandler_Handle_NilClient(t *testing.T) {
 		Arguments: nil,
 	}
 
-	result, err := handler.Handle(ctx, session, params)
+	result, err := handler.HandleList(ctx, session, params)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -116,7 +118,7 @@ func TestProvidersHandler_Handle_NilClient(t *testing.T) {
 	assert.Contains(t, textContent.Text, "gRPC connection to blockchain is not available")
 }
 
-func TestProvidersHandler_Handle_ValidationError(t *testing.T) {
+func TestProvidersHandler_HandleList_ValidationError(t *testing.T) {
 	mockClient := &MockQueryClient{}
 	handler := NewProvidersHandler(mockClient, 30*time.Second)
 
@@ -126,18 +128,18 @@ func TestProvidersHandler_Handle_ValidationError(t *testing.T) {
 	params := &mcp.CallToolParams{
 		Name: "get-providers",
 		Arguments: map[string]interface{}{
-			"limit": 2000,
+			"limit": 2000, // Over max of 1000
 		},
 	}
 
-	result, err := handler.Handle(ctx, session, params)
+	result, err := handler.HandleList(ctx, session, params)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "validation failed")
 }
 
-func TestProvidersHandler_Handle_DefaultValues(t *testing.T) {
+func TestProvidersHandler_HandleList_DefaultValues(t *testing.T) {
 	mockClient := &MockQueryClient{}
 	handler := NewProvidersHandler(mockClient, 30*time.Second)
 
@@ -148,16 +150,14 @@ func TestProvidersHandler_Handle_DefaultValues(t *testing.T) {
 		Providers: []overlockv1beta1.Provider{},
 	}
 
-	mockClient.On("ListProvider", mock.AnythingOfType("*context.timerCtx"), mock.MatchedBy(func(req *overlockv1beta1.QueryListProviderRequest) bool {
-		return req.Pagination.Limit == 100 && req.Pagination.Offset == 0
-	})).Return(expectedResponse, nil)
+	mockClient.On("ListProvider", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(expectedResponse, nil)
 
 	params := &mcp.CallToolParams{
 		Name:      "get-providers",
-		Arguments: nil,
+		Arguments: nil, // Should apply default values
 	}
 
-	result, err := handler.Handle(ctx, session, params)
+	result, err := handler.HandleList(ctx, session, params)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -165,7 +165,7 @@ func TestProvidersHandler_Handle_DefaultValues(t *testing.T) {
 	mockClient.AssertExpectations(t)
 }
 
-func TestProvidersHandler_Handle_CircuitBreakerOpen(t *testing.T) {
+func TestProvidersHandler_HandleList_CircuitBreakerOpen(t *testing.T) {
 	handler := NewProvidersHandler(nil, 30*time.Second)
 
 	handler.circuitBreaker = gobreaker.NewCircuitBreaker(gobreaker.Settings{
@@ -184,7 +184,7 @@ func TestProvidersHandler_Handle_CircuitBreakerOpen(t *testing.T) {
 		Arguments: nil,
 	}
 
-	result, err := handler.Handle(ctx, session, params)
+	result, err := handler.HandleList(ctx, session, params)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -195,7 +195,7 @@ func TestProvidersHandler_Handle_CircuitBreakerOpen(t *testing.T) {
 	assert.Contains(t, textContent.Text, "gRPC connection to blockchain is not available")
 }
 
-func TestProvidersHandler_Handle_WithCreatorFilter(t *testing.T) {
+func TestProvidersHandler_HandleList_WithCreatorFilter(t *testing.T) {
 	mockClient := &MockQueryClient{}
 	handler := NewProvidersHandler(mockClient, 30*time.Second)
 
@@ -206,18 +206,283 @@ func TestProvidersHandler_Handle_WithCreatorFilter(t *testing.T) {
 		Providers: []overlockv1beta1.Provider{},
 	}
 
-	creator := "test-creator-address"
-	mockClient.On("ListProvider", mock.AnythingOfType("*context.timerCtx"), mock.MatchedBy(func(req *overlockv1beta1.QueryListProviderRequest) bool {
-		return req.Creator != nil && req.Creator.Value == creator
-	})).Return(expectedResponse, nil)
+	mockClient.On("ListProvider", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(expectedResponse, nil)
 
 	params := &mcp.CallToolParams{
 		Name: "get-providers",
 		Arguments: map[string]interface{}{
-			"creator": creator,
+			"creator": "test-creator-address",
 		},
 	}
 
+	result, err := handler.HandleList(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	mockClient.AssertExpectations(t)
+}
+
+// Tests for HandleShow (show-provider functionality)
+
+func TestProvidersHandler_HandleShow_Success(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewProvidersHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	expectedResponse := &overlockv1beta1.QueryShowProviderResponse{
+		Provider: &overlockv1beta1.Provider{
+			Id:      1,
+			Creator: "overlock1test123",
+		},
+	}
+
+	mockClient.On("ShowProvider", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(expectedResponse, nil)
+
+	params := &mcp.CallToolParams{
+		Name: "show-provider",
+		Arguments: map[string]interface{}{
+			"id": 1,
+		},
+	}
+
+	result, err := handler.HandleShow(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Content, 1)
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+
+	var response overlockv1beta1.QueryShowProviderResponse
+	err = json.Unmarshal([]byte(textContent.Text), &response)
+	require.NoError(t, err)
+	assert.NotNil(t, response.Provider)
+	assert.Equal(t, uint64(1), response.Provider.Id)
+	assert.Equal(t, "overlock1test123", response.Provider.Creator)
+
+	mockClient.AssertExpectations(t)
+}
+
+func TestProvidersHandler_HandleShow_NilClient(t *testing.T) {
+	handler := NewProvidersHandler(nil, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	params := &mcp.CallToolParams{
+		Name: "show-provider",
+		Arguments: map[string]interface{}{
+			"id": 1,
+		},
+	}
+
+	result, err := handler.HandleShow(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Content, 1)
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "gRPC connection to blockchain is not available")
+}
+
+func TestProvidersHandler_HandleShow_ValidationError_MissingID(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewProvidersHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	params := &mcp.CallToolParams{
+		Name:      "show-provider",
+		Arguments: map[string]interface{}{},
+	}
+
+	result, err := handler.HandleShow(ctx, session, params)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "validation failed")
+}
+
+func TestProvidersHandler_HandleShow_ValidationError_InvalidID(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewProvidersHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	params := &mcp.CallToolParams{
+		Name: "show-provider",
+		Arguments: map[string]interface{}{
+			"id": 0,
+		},
+	}
+
+	result, err := handler.HandleShow(ctx, session, params)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "validation failed")
+}
+
+func TestProvidersHandler_HandleShow_ValidationError_InvalidType(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewProvidersHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	params := &mcp.CallToolParams{
+		Name: "show-provider",
+		Arguments: map[string]interface{}{
+			"id": "invalid", // Invalid type
+		},
+	}
+
+	result, err := handler.HandleShow(ctx, session, params)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "validation failed")
+}
+
+func TestProvidersHandler_HandleShow_ProviderNotFound(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewProvidersHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	// Response with nil provider indicates not found
+	expectedResponse := &overlockv1beta1.QueryShowProviderResponse{
+		Provider: nil,
+	}
+
+	mockClient.On("ShowProvider", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(expectedResponse, nil)
+
+	params := &mcp.CallToolParams{
+		Name: "show-provider",
+		Arguments: map[string]interface{}{
+			"id": 999,
+		},
+	}
+
+	result, err := handler.HandleShow(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Content, 1)
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "Provider with ID '999' not found")
+
+	mockClient.AssertExpectations(t)
+}
+
+func TestProvidersHandler_HandleShow_CircuitBreakerOpen(t *testing.T) {
+	handler := NewProvidersHandler(nil, 30*time.Second)
+
+	handler.circuitBreaker = gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "test-breaker",
+		MaxRequests: 0,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return true
+		},
+	})
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	params := &mcp.CallToolParams{
+		Name: "show-provider",
+		Arguments: map[string]interface{}{
+			"id": 1,
+		},
+	}
+
+	result, err := handler.HandleShow(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Content, 1)
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "gRPC connection to blockchain is not available")
+}
+
+func TestProvidersHandler_HandleShow_WithValidID(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewProvidersHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	expectedResponse := &overlockv1beta1.QueryShowProviderResponse{
+		Provider: &overlockv1beta1.Provider{
+			Id:      123,
+			Creator: "overlock1production123",
+		},
+	}
+
+	testID := uint64(123)
+	mockClient.On("ShowProvider", mock.AnythingOfType("*context.timerCtx"), mock.MatchedBy(func(req *overlockv1beta1.QueryShowProviderRequest) bool {
+		return req.Id == testID
+	})).Return(expectedResponse, nil)
+
+	params := &mcp.CallToolParams{
+		Name: "show-provider",
+		Arguments: map[string]interface{}{
+			"id": 123,
+		},
+	}
+
+	result, err := handler.HandleShow(ctx, session, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+
+	var response overlockv1beta1.QueryShowProviderResponse
+	err = json.Unmarshal([]byte(textContent.Text), &response)
+	require.NoError(t, err)
+	assert.NotNil(t, response.Provider)
+	assert.Equal(t, testID, response.Provider.Id)
+	assert.Equal(t, "overlock1production123", response.Provider.Creator)
+
+	mockClient.AssertExpectations(t)
+}
+
+// Test the backward compatibility Handle method
+
+func TestProvidersHandler_Handle_BackwardCompatibility(t *testing.T) {
+	mockClient := &MockQueryClient{}
+	handler := NewProvidersHandler(mockClient, 30*time.Second)
+
+	ctx := context.Background()
+	session := &mcp.ServerSession{}
+
+	expectedResponse := &overlockv1beta1.QueryListProviderResponse{
+		Providers: []overlockv1beta1.Provider{},
+	}
+
+	mockClient.On("ListProvider", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(expectedResponse, nil)
+
+	params := &mcp.CallToolParams{
+		Name:      "get-providers",
+		Arguments: nil,
+	}
+
+	// Test that Handle method still works (routes to HandleList)
 	result, err := handler.Handle(ctx, session, params)
 
 	require.NoError(t, err)

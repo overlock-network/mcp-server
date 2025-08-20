@@ -1,0 +1,22 @@
+{
+  "provider": {
+    "metadata": {
+      "name": "test-provider-1",
+      "description": "Test provider for E2E testing",
+      "annotations": "{\"region\":\"us-east-1\",\"specs\":\"8vcpu-16gb\",\"version\":\"1.0.0\"}"
+    },
+    "id": 1,
+    "creator": "overlock1abc123def456ghi789jkl012mno345pqr678stu901vwx",
+    "ip": "192.168.1.100",
+    "port": 8080,
+    "country_code": "US",
+    "environment_type": "production",
+    "availability": "available",
+    "register_time": "2024-01-15T10:30:00Z",
+    "performance_metrics": {
+      "uptime_percentage": 99.95,
+      "response_time_ms": 45,
+      "throughput_requests_per_second": 1500
+    }
+  }
+}

@@ -73,9 +73,29 @@ func (m *MockQueryClient) ListProvider(ctx context.Context, req *overlockv1beta1
 	return &response, nil
 }
 
-// ShowProvider implements the ShowProvider method (not used in our test)
+// ShowProvider implements the ShowProvider method by returning test data
 func (m *MockQueryClient) ShowProvider(ctx context.Context, req *overlockv1beta1.QueryShowProviderRequest, opts ...grpc.CallOption) (*overlockv1beta1.QueryShowProviderResponse, error) {
-	return nil, nil
+	// Load test data from JSON file
+	jsonFile := filepath.Join(m.testDataPath, "provider_response.json")
+	data, err := os.ReadFile(jsonFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var response overlockv1beta1.QueryShowProviderResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+
+	// Check if the requested ID matches the test data
+	if req.Id != 1 {
+		// Return empty response for non-matching IDs (provider not found)
+		return &overlockv1beta1.QueryShowProviderResponse{
+			Provider: nil,
+		}, nil
+	}
+
+	return &response, nil
 }
 
 // ShowEnvironment implements the ShowEnvironment method by returning test data
