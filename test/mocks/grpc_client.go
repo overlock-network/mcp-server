@@ -123,7 +123,52 @@ func (m *MockQueryClient) ShowEnvironment(ctx context.Context, req *overlockv1be
 	return &response, nil
 }
 
-// ListEnvironment implements the ListEnvironment method (not used in our test)
+// ListEnvironment implements the ListEnvironment method by returning test data
 func (m *MockQueryClient) ListEnvironment(ctx context.Context, req *overlockv1beta1.QueryListEnvironmentRequest, opts ...grpc.CallOption) (*overlockv1beta1.QueryListEnvironmentResponse, error) {
-	return nil, nil
+	// Load test data from JSON file
+	jsonFile := filepath.Join(m.testDataPath, "environments_response.json")
+	data, err := os.ReadFile(jsonFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var response overlockv1beta1.QueryListEnvironmentResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+
+	// Apply filtering if creator is specified
+	if req.Creator != "" {
+		var filteredEnvironments []overlockv1beta1.Environment
+		for _, environment := range response.Environments {
+			if environment.Creator == req.Creator {
+				filteredEnvironments = append(filteredEnvironments, environment)
+			}
+		}
+		response.Environments = filteredEnvironments
+	}
+
+	// Apply pagination
+	if req.Pagination != nil {
+		offset := int(req.Pagination.Offset)
+		limit := int(req.Pagination.Limit)
+
+		if offset >= len(response.Environments) {
+			response.Environments = []overlockv1beta1.Environment{}
+		} else {
+			end := offset + limit
+			if end > len(response.Environments) {
+				end = len(response.Environments)
+			}
+			response.Environments = response.Environments[offset:end]
+		}
+
+		// Update pagination info
+		response.Pagination = &query.PageResponse{
+			NextKey: []byte{},
+			Total:   uint64(len(response.Environments)),
+		}
+	}
+
+	return &response, nil
 }
